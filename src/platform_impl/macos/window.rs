@@ -1,5 +1,7 @@
 #![allow(clippy::unnecessary_cast)]
 
+use servo_display_link::macos::cvdisplaylink::DisplayLink;
+use servo_display_link::macos::cvdisplaylink::{CVDisplayLink, CVTimeStamp};
 use std::collections::VecDeque;
 use std::f64;
 use std::ops;
@@ -241,6 +243,8 @@ pub struct SharedState {
     pub(crate) option_as_alt: OptionAsAlt,
 
     decorations: bool,
+
+    display_link: Option<DisplayLink>,
 }
 
 impl SharedState {
@@ -550,6 +554,23 @@ impl WinitWindow {
         if attrs.maximized {
             this.set_maximized(attrs.maximized);
         }
+
+        // Setup CVDisplayLink for window
+        let id = this.id().0;
+        let display_id = this.current_monitor().expect("window missing monitor").0;
+        let display_link = unsafe {
+            let mut display_link = DisplayLink::on_display(display_id).unwrap();
+            display_link.set_output_callback(cv_display_link_callback, id as *mut c_void);
+            display_link.set_current_display(display_id);
+            display_link.start();
+            display_link
+        };
+        {
+            let mut shared_state_lock = this.lock_shared_state("display_link");
+            shared_state_lock.display_link = Some(display_link);
+        }
+
+        //});
 
         Ok((this, delegate))
     }
@@ -1619,4 +1640,19 @@ fn set_ns_theme(theme: Option<Theme>) {
         });
         app.setAppearance(appearance.as_ref().map(|a| a.as_ref()));
     }
+}
+
+unsafe extern "C" fn cv_display_link_callback(
+    _: *mut CVDisplayLink,
+    _: *const CVTimeStamp,
+    _in_out_timestamp: *const CVTimeStamp,
+    _: i64,
+    _: *mut i64,
+    display_link_context: *mut c_void,
+) -> i32 {
+    let window_id = display_link_context as usize;
+    MainThreadMarker::run_on_main(|_| {
+        AppState::handle_redraw(RootWindowId(WindowId(window_id)));
+    });
+    0
 }

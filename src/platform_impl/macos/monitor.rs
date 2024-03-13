@@ -96,7 +96,7 @@ impl VideoMode {
 }
 
 #[derive(Clone)]
-pub struct MonitorHandle(CGDirectDisplayID);
+pub struct MonitorHandle(pub CGDirectDisplayID);
 
 // `CGDirectDisplayID` changes on video mode change, so we cannot rely on that
 // for comparisons, but we can use `CGDisplayCreateUUIDFromDisplayID` to get an
